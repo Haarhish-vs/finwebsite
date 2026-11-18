@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Landmark, Shield, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Landmark, Shield, RefreshCw, CheckCircle2, AlertCircle, LogOut } from 'lucide-react';
 import { healthApi } from '../../api/health';
+import { useAuth } from '../../context/useAuth';
 
 interface AppHeaderProps {
   title: string;
@@ -15,6 +16,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 }) => {
   const [serverOk, setServerOk] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(false);
+  const { logout } = useAuth();
 
   const checkHealth = async () => {
     setChecking(true);
@@ -34,6 +36,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     const interval = setInterval(checkHealth, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleLogout = () => {
+    if (window.confirm('Are you sure you want to sign out?')) {
+      logout();
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-4 sm:px-6 backdrop-blur-md">
@@ -100,6 +108,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           <span className="hidden sm:inline">Single Administrator</span>
           <span className="sm:hidden">Admin</span>
         </div>
+
+        {/* Sign Out Button */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="p-2 rounded-lg text-slate-500 hover:text-red-700 hover:bg-red-50 transition-colors"
+          title="Sign out of Admin Panel"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
     </header>
   );

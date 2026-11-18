@@ -7,7 +7,12 @@ import { customerApi } from '../../api/customers';
 import type { Customer, LoanPreviewResponse } from '../../api/types';
 import { formatCurrency } from '../../utils/currency';
 import { toInputDateFormat } from '../../utils/date';
-import { calculateLoanClient } from '../../utils/loanCalculator';
+import {
+  calculateLoanClient,
+  WEEKDAY_NAMES,
+  parseWeekday,
+  computeFirstDueDateForWeekday,
+} from '../../utils/loanCalculator';
 import {
   User,
   Phone,
@@ -60,6 +65,7 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
   const [principal, setPrincipal] = useState<string>('50000');
   const [interestRate, setInterestRate] = useState<string>('5.0');
   const [frequency, setFrequency] = useState<'monthly' | 'weekly'>('monthly');
+  const [selectedWeekday, setSelectedWeekday] = useState<string>('Monday');
   const [duration, setDuration] = useState<string>('10');
   const [startDate, setStartDate] = useState<string>(() => toInputDateFormat(new Date()));
   const [firstDueDate, setFirstDueDate] = useState<string>(() => {
@@ -106,17 +112,38 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
     }
   }, [isOpen, initialCustomer]);
 
-  // Recalculate default first due date when start date or frequency changes
+  // Recalculate default first due date when start date or frequency or weekday changes
   const handleStartDateChange = (newStart: string) => {
     setStartDate(newStart);
     try {
-      const d = new Date(newStart);
       if (frequency === 'weekly') {
+        const parsed = parseWeekday(selectedWeekday);
+        if (parsed) {
+          const d = computeFirstDueDateForWeekday(newStart, parsed.dayIndex);
+          setFirstDueDate(toInputDateFormat(d));
+          return;
+        }
+        const d = new Date(newStart);
         d.setDate(d.getDate() + 7);
+        setFirstDueDate(toInputDateFormat(d));
       } else {
+        const d = new Date(newStart);
         d.setMonth(d.getMonth() + 1);
+        setFirstDueDate(toInputDateFormat(d));
       }
-      setFirstDueDate(toInputDateFormat(d));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleWeekdayChange = (weekday: string) => {
+    setSelectedWeekday(weekday);
+    try {
+      const parsed = parseWeekday(weekday);
+      if (parsed) {
+        const d = computeFirstDueDateForWeekday(startDate, parsed.dayIndex);
+        setFirstDueDate(toInputDateFormat(d));
+      }
     } catch {
       // ignore
     }
@@ -125,15 +152,23 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
   const handleFrequencyChange = (newFreq: 'monthly' | 'weekly') => {
     setFrequency(newFreq);
     try {
-      const d = new Date(startDate);
       if (newFreq === 'weekly') {
-        d.setDate(d.getDate() + 7);
+        const parsed = parseWeekday(selectedWeekday);
+        if (parsed) {
+          const d = computeFirstDueDateForWeekday(startDate, parsed.dayIndex);
+          setFirstDueDate(toInputDateFormat(d));
+        } else {
+          const d = new Date(startDate);
+          d.setDate(d.getDate() + 7);
+          setFirstDueDate(toInputDateFormat(d));
+        }
         if (duration === '10') setDuration('24'); // sensible default for weeks
       } else {
+        const d = new Date(startDate);
         d.setMonth(d.getMonth() + 1);
+        setFirstDueDate(toInputDateFormat(d));
         if (duration === '24') setDuration('10');
       }
-      setFirstDueDate(toInputDateFormat(d));
     } catch {
       // ignore
     }
@@ -144,6 +179,7 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
     principal: parseFloat(principal) || 0,
     interestRate: parseFloat(interestRate) || 0,
     frequency,
+    paymentDay: frequency === 'weekly' ? selectedWeekday : undefined,
     totalInstallments: parseInt(duration, 10) || 0,
     startDate,
     firstDueDate,
@@ -184,6 +220,7 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
         principal: p,
         interest_rate: r,
         frequency,
+        payment_day: frequency === 'weekly' ? selectedWeekday : undefined,
         total_installments: n,
         start_date: startDate,
         first_due_date: firstDueDate,
@@ -191,9 +228,11 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
 
       setPreviewData(preview);
       setEditableInstallments(
-        preview.installments.map((inst) => ({
-          installment_number: inst.installment_number,
-          period_label: inst.period_label,
+        preview.installments.map((inst, idx) => ({
+          installment_number: inst.installment_number || idx + 1,
+          period_label:
+            inst.period_label ||
+            (frequency === 'weekly' ? `Week ${idx + 1}` : `Month ${idx + 1}`),
           due_date: inst.due_date,
           amount_due: inst.amount_due,
         }))
@@ -260,6 +299,7 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
         principal: parseFloat(principal),
         interest_rate: parseFloat(interestRate),
         frequency,
+        payment_day: frequency === 'weekly' ? selectedWeekday : undefined,
         total_installments: parseInt(duration, 10),
         start_date: startDate,
         first_due_date: firstDueDate,
@@ -439,6 +479,43 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
                 </div>
               </div>
 
+              {/* Weekday Selector (Visible ONLY when Weekly is selected) */}
+              {frequency === 'weekly' && (
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-[#1E3A8A]">
+                      Select Weekly Repayment Day *
+                    </label>
+                    <span className="text-[11px] font-semibold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full">
+                      Every {selectedWeekday}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                    {WEEKDAY_NAMES.map((day) => {
+                      const isSelected = selectedWeekday.toLowerCase() === day.toLowerCase();
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => handleWeekdayChange(day)}
+                          className={`py-1.5 px-1 text-center rounded-lg text-xs font-semibold transition-all ${
+                            isSelected
+                              ? 'bg-[#1E3A8A] text-white shadow-sm ring-2 ring-blue-300'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                        >
+                          <span className="hidden sm:inline">{day.slice(0, 3)}</span>
+                          <span className="sm:hidden">{day.slice(0, 1)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-blue-600/80">
+                    Installments will automatically align to every {selectedWeekday}, starting on the first upcoming {selectedWeekday}.
+                  </p>
+                </div>
+              )}
+
               {/* Duration and Dates */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Input
@@ -464,7 +541,11 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
                   type="date"
                   value={firstDueDate}
                   onChange={(e) => setFirstDueDate(e.target.value)}
-                  helperText={frequency === 'weekly' ? '1 week offset' : '1 month offset'}
+                  helperText={
+                    frequency === 'weekly'
+                      ? `First ${selectedWeekday}`
+                      : '1 month offset'
+                  }
                 />
               </div>
 
@@ -525,6 +606,15 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
                   </span>
                 </div>
               </div>
+
+              {frequency === 'weekly' && (
+                <div className="px-3.5 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-medium">Repayment Day:</span>
+                  <span className="font-bold text-[#1E3A8A]">
+                    Every {selectedWeekday} ({formatCurrency(clientCalc.baseInstallment)} / week)
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Action Footer */}
@@ -559,7 +649,7 @@ export const OriginateLoanModal: React.FC<OriginateLoanModalProps> = ({
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
                 <span>
                   {isReconciled
-                    ? 'Schedule is fully reconciled with total expected repayment.'
+                    ? `Schedule is fully reconciled (${editableInstallments.length} ${frequency === 'weekly' ? 'weekly' : 'monthly'} installments).`
                     : `Schedule sum (${formatCurrency(
                         revisedTotal
                       )}) differs from target total (${formatCurrency(targetTotal)}).`}

@@ -3,6 +3,7 @@ import { StatCard } from '../../components/common/StatCard';
 import { Button } from '../../components/common/Button';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+import { WeeklyCollectionOverview } from './WeeklyCollectionOverview';
 import { OriginateLoanModal } from '../loanOrigination/OriginateLoanModal';
 import { LoanDetailsModal } from '../payments/LoanDetailsModal';
 import { CustomerDetailsModal } from '../customers/CustomerDetailsModal';
@@ -38,6 +39,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateTab 
   const [totalLoansCount, setTotalLoansCount] = useState(0);
   const [totalLoanCollected, setTotalLoanCollected] = useState(0);
   const [overdueInstallmentsCount, setOverdueInstallmentsCount] = useState(0);
+  const [overdueTotalAmount, setOverdueTotalAmount] = useState(0);
+  const [overdueCustomersCount, setOverdueCustomersCount] = useState(0);
 
   // Recent records
   const [recentLoans, setRecentLoans] = useState<Loan[]>([]);
@@ -58,7 +61,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateTab 
       const [customerRes, loanRes, overdueRes] = await Promise.all([
         customerApi.getCustomers({ page: 1, limit: 5 }),
         loanApi.getLoans({ page: 1, limit: 5 }),
-        installmentApi.getInstallments({ status: 'overdue', limit: 1 }),
+        installmentApi.getInstallments({ status: 'overdue', limit: 100 }),
       ]);
 
       // Sum initial deposits
@@ -69,6 +72,21 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateTab 
       const lns = loanRes.loans || [];
       const collectedAmt = lns.reduce((acc, l) => acc + (l.amount_collected || 0), 0);
 
+      // Overdue stats
+      const overdueItems = overdueRes.installments || [];
+      const overdueCount = overdueRes.pagination?.totalRecords ?? overdueItems.length;
+      const overdueSum = overdueItems.reduce((acc, inst) => {
+        const remaining =
+          inst.outstanding_balance !== undefined
+            ? inst.outstanding_balance
+            : Math.max(0, (inst.amount_due || 0) - (inst.amount_paid || 0));
+        return acc + remaining;
+      }, 0);
+
+      const uniqueOverdueBorrowers = new Set(
+        overdueItems.map((i) => i.customer_id).filter(Boolean)
+      ).size;
+
       setRecentCustomers(custs);
       setTotalCustomerCount(customerRes.pagination?.totalRecords || custs.length);
       setTotalInitialCollected(initDeposit);
@@ -77,7 +95,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateTab 
       setTotalLoansCount(loanRes.pagination?.totalRecords || lns.length);
       setTotalLoanCollected(collectedAmt);
 
-      setOverdueInstallmentsCount(overdueRes.pagination?.totalRecords || 0);
+      setOverdueInstallmentsCount(overdueCount);
+      setOverdueTotalAmount(overdueSum);
+      setOverdueCustomersCount(uniqueOverdueBorrowers);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard metrics.');
     } finally {
@@ -172,7 +192,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateTab 
           value={`${overdueInstallmentsCount} Overdue`}
           subtitle={
             overdueInstallmentsCount > 0
-              ? 'Requires immediate follow-up'
+              ? `${formatCurrency(overdueTotalAmount)} across ${overdueCustomersCount} borrower${
+                  overdueCustomersCount === 1 ? '' : 's'
+                }`
               : 'No delinquent balances'
           }
           icon={
@@ -188,9 +210,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigateTab 
         />
       </div>
 
+      {/* Weekly Collection Overview (Weekday-wise schedule matching Flutter app) */}
+      <WeeklyCollectionOverview onDataChanged={loadDashboardData} />
+
       {/* Quick Action Shortcuts */}
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
-        <h3 className="text-sm font-bold text-[#0F172A] tracking-tight uppercase tracking-wider text-slate-500">
+        <h3 className="text-sm font-bold tracking-tight uppercase text-slate-500">
           Quick Actions
         </h3>
         <div className="flex flex-wrap items-center gap-2.5">

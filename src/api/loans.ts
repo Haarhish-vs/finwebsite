@@ -11,6 +11,7 @@ export const loanApi = {
     principal: number;
     interest_rate: number;
     frequency?: string;
+    payment_day?: string;
     total_installments: number;
     start_date?: string;
     first_due_date?: string;
@@ -36,6 +37,7 @@ export const loanApi = {
     principal: number;
     interest_rate: number;
     frequency?: string;
+    payment_day?: string;
     total_installments: number;
     start_date?: string;
     first_due_date?: string;

@@ -1,3 +1,14 @@
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: string;
+}
+
+export interface AuthLoginResponse {
+  token: string;
+  admin: AdminUser;
+}
+
 export interface Customer {
   id: string;
   full_name: string;
@@ -21,6 +32,7 @@ export interface LoanMetadata {
   duration_in_months?: number;
   first_due_date?: string;
   final_due_date?: string;
+  payment_day?: string | null;
   notes?: string;
 }
 
@@ -48,6 +60,7 @@ export interface Loan {
   down_payment?: number;
   total_installments: number;
   frequency: 'weekly' | 'monthly';
+  payment_day?: string | null;
   start_date: string;
   end_date: string;
   status: 'active' | 'completed' | 'defaulted';
@@ -81,8 +94,11 @@ export interface Installment {
     title: string;
     plan_code: string;
     frequency: string;
+    payment_day?: string | null;
   } | null;
   plan_code?: string | null;
+  frequency?: string;
+  is_weekly?: boolean;
   installment_number: number;
   period_label: string;
   due_date: string;
@@ -116,6 +132,7 @@ export interface Payment {
     id: string;
     title: string;
     plan_code: string;
+    frequency?: string;
   } | null;
 }
 
@@ -123,6 +140,7 @@ export interface LoanPreviewSummary {
   principal: number;
   monthlyInterestRate: number;
   frequency: 'weekly' | 'monthly';
+  paymentDay?: string | null;
   totalInstallments: number;
   durationInMonths: number;
   monthlyInterest: number;
@@ -151,6 +169,38 @@ export interface LoanPreviewInstallment {
 export interface LoanPreviewResponse {
   summary: LoanPreviewSummary;
   installments: LoanPreviewInstallment[];
+}
+
+export interface WeeklyCollectionItem {
+  installment_id: string;
+  customer_id: string | null;
+  customer_name: string;
+  phone_number: string;
+  installment_amount: number;
+  amount_paid: number;
+  outstanding_balance: number;
+  due_date: string;
+  status: 'paid' | 'overdue' | 'pending' | string;
+  plan_code: string;
+  installment_number: number;
+}
+
+export interface WeekdayBreakdown {
+  weekday: string;
+  date: string;
+  customer_count: number;
+  total_due: number;
+  total_collected: number;
+  items: WeeklyCollectionItem[];
+}
+
+export interface WeeklyCollectionsResponse {
+  week_start: string;
+  week_end: string;
+  total_weekly_customers: number;
+  total_weekly_amount_due: number;
+  total_weekly_collected: number;
+  weekdays: WeekdayBreakdown[];
 }
 
 export interface PaginationMeta {

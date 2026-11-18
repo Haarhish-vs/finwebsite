@@ -1,12 +1,17 @@
 import { useState } from 'react';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
+import { LoginScreen } from './features/auth/LoginScreen';
 import { MainLayout } from './components/layout/MainLayout';
 import type { NavTabId } from './components/layout/Sidebar';
 import { DashboardScreen } from './features/dashboard/DashboardScreen';
 import { CustomersScreen } from './features/customers/CustomersScreen';
 import { PaymentsHubScreen } from './features/payments/PaymentsHubScreen';
 import { ReportsScreen } from './features/reports/ReportsScreen';
+import { LoadingSpinner } from './components/common/LoadingSpinner';
 
-export function App() {
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavTabId>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
@@ -26,6 +31,18 @@ export function App() {
     setSelectedLoanId(loanId);
     setCurrentTab('payments');
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <LoadingSpinner label="Authenticating session..." />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen />;
+  }
 
   return (
     <MainLayout
@@ -55,6 +72,14 @@ export function App() {
         {currentTab === 'reports' && <ReportsScreen />}
       </div>
     </MainLayout>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

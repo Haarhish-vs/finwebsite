@@ -6,7 +6,29 @@
 const RAW_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://finance-app-odjk.onrender.com';
 const API_BASE_URL = `${RAW_BASE_URL.replace(/\/+$/, '')}/api/v1`;
 
+const TOKEN_KEY = 'auth_admin_token';
+
 export { API_BASE_URL, RAW_BASE_URL };
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export class ApiError extends Error {
   status: number;
@@ -30,7 +52,7 @@ interface RequestOptions extends RequestInit {
 }
 
 export async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = 45000, params, headers, ...restOptions } = options;
+  const { timeoutMs = 45000, params, headers = {}, ...restOptions } = options;
 
   let urlStr = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}/${endpoint.replace(/^\/+/, '')}`;
 
@@ -44,6 +66,17 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
     urlStr = url.toString();
   }
 
+  const token = getAuthToken();
+  const requestHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    ...(headers as Record<string, string>),
+  };
+
+  if (token && !requestHeaders.Authorization) {
+    requestHeaders.Authorization = `Bearer ${token}`;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -52,11 +85,7 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
   try {
     const response = await fetch(urlStr, {
       ...restOptions,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...headers,
-      },
+      headers: requestHeaders,
       signal: controller.signal,
     });
 
@@ -72,10 +101,16 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
     }
 
     if (!response.ok) {
+      if (response.status === 401 && !endpoint.includes('auth/login')) {
+        // Token expired or unauthorized; trigger logout notification if needed
+        window.dispatchEvent(new Event('auth:unauthorized'));
+      }
+
       const errMsg =
         parsedBody?.message ||
+        parsedBody?.error?.message ||
         (typeof parsedBody === 'string' ? parsedBody : `Server error (${response.status})`);
-      throw new ApiError(errMsg, response.status, parsedBody, parsedBody?.code);
+      throw new ApiError(errMsg, response.status, parsedBody, parsedBody?.code || parsedBody?.error?.code);
     }
 
     return parsedBody as T;
